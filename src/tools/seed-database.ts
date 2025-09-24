@@ -1,5 +1,5 @@
 import { ChatOpenAI, OpenAIEmbeddings } from "@langchain/openai";
-import { StructuredOutputParser } from "@langchain/core/output_parsers";
+import { JsonOutputParser } from "@langchain/core/output_parsers";
 import { MongoClient } from "mongodb";
 import { MongoDBAtlasVectorSearch } from "@langchain/mongodb";
 import { z } from "zod";
@@ -65,17 +65,18 @@ const EmployeeSchema = z.object({
 
 type Employee = z.infer<typeof EmployeeSchema>;
 
-const parser = StructuredOutputParser.fromZodSchema(z.array(EmployeeSchema));
+const parser = new JsonOutputParser();
 
 async function generateSyntheticData(): Promise<Employee[]> {
   const prompt = `You are a helpful assistant that generates employee data. Generate 20 fictional employee records. Each record should include the following fields: employee_id, first_name, last_name, date_of_birth, address, contact_details, job_details, work_location, reporting_manager, skills, performance_reviews, benefits, emergency_contact, notes. Ensure variety in the data and realistic values.
 
-  ${parser.getFormatInstructions()}`;
+  Return the data as a valid JSON array of employee objects.`;
 
   console.log("Generating synthetic data...");
 
   const response = await llm.invoke(prompt);
-  return parser.parse(response.content as string);
+  const parsed = parser.parse(response.content as string);
+  return z.array(EmployeeSchema).parse(parsed);
 }
 
 async function createEmployeeSummary(employee: Employee): Promise<string> {
