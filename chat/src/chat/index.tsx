@@ -25,7 +25,7 @@ interface Message {
   timestamp: Date;
 }
 
-const Chat = () => {
+const Chat: React.FC = () => {
   const classes = useStyles();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
@@ -112,37 +112,15 @@ const Chat = () => {
   };
 
   return (
-    <div className={classes.container}>
-      <Container
-        maxWidth={false}
-        sx={{
-          maxWidth: "90%",
-          height: "calc(100vh - 100px)",
-          marginTop: "50px",
-          marginBottom: "50px",
-        }}
-      >
-        <Paper
-          elevation={20}
-          sx={{
-            height: "100%",
-            display: "flex",
-            flexDirection: "column",
-            overflow: "hidden",
-          }}
-        >
-          <Box
-            sx={{
-              position: "sticky",
-              top: 0,
-              zIndex: 1,
-              bgcolor: "background.paper",
-              p: 1,
-              display: "flex",
-              justifyContent: "flex-end",
-            }}
-          >
-            <Button variant="outlined" onClick={clearChat}>
+    <div className={classes.mainDiv}>
+      <Container maxWidth={false} className={classes.chatContainer}>
+        <Paper elevation={20} className={classes.chatPaper}>
+          <Box className={classes.stickyHeader}>
+            <Button
+              variant="outlined"
+              onClick={clearChat}
+              sx={{ mr: 1, mt: 1, mb: 1 }}
+            >
               Clear
             </Button>
           </Box>
