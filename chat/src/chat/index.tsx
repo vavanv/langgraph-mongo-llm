@@ -55,10 +55,8 @@ const Chat: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const endpoint = threadId ? "/api/continue" : "/api/start";
-      const body = threadId
-        ? { message: inputValue, thread_id: threadId }
-        : { message: inputValue };
+      const endpoint = threadId ? `/chat/${threadId}` : "/chat";
+      const body = { message: inputValue };
 
       const response = await fetch(endpoint, {
         method: "POST",
@@ -74,8 +72,8 @@ const Chat: React.FC = () => {
 
       const data = await response.json();
 
-      if (!threadId && data.thread_id) {
-        setThreadId(data.thread_id);
+      if (!threadId && data.threadId) {
+        setThreadId(data.threadId);
       }
 
       const assistantMessage: Message = {

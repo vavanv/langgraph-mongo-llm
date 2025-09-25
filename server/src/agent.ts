@@ -35,7 +35,7 @@ export async function callAgent(
   // Define the tools for the agent to use
   const employeeLookupTool = tool(
     async (input: unknown) => {
-      const { query, n = 10 } = input as { query: string; n?: number };
+      const { query, n = 100 } = input as { query: string; n?: number };
       console.log("Employee lookup tool called");
 
       const dbConfig = {
