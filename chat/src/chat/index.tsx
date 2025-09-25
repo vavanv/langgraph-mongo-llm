@@ -16,8 +16,7 @@ import {
   CardContent,
 } from "@mui/material";
 import { Send as SendIcon, Person as PersonIcon } from "@mui/icons-material";
-import Header from "../components/Header";
-
+import { useStyles } from "./styles";
 interface Message {
   id: string;
   text: string;
@@ -26,6 +25,7 @@ interface Message {
 }
 
 const Chat: React.FC = () => {
+  const classes = useStyles();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -107,27 +107,24 @@ const Chat: React.FC = () => {
     }
   };
 
-  const clearChat = () => {
-    setMessages([]);
-    setThreadId(null);
-  };
-
   return (
-    <Box sx={{ height: "100vh", display: "flex", flexDirection: "column" }}>
-      <Header onClearChat={clearChat} />
-
+    <div className={classes.container}>
       <Container
-        maxWidth="md"
-        sx={{ flex: 1, display: "flex", flexDirection: "column", py: 2 }}
+        maxWidth={false}
+        sx={{
+          maxWidth: "90%",
+          height: "calc(100vh - 100px)",
+          marginTop: "50px",
+          marginBottom: "50px",
+        }}
       >
         <Paper
-          elevation={2}
+          elevation={20}
           sx={{
-            flex: 1,
+            height: "100%",
             display: "flex",
             flexDirection: "column",
             overflow: "hidden",
-            mb: 2,
           }}
         >
           <Box sx={{ flex: 1, overflow: "auto", p: 1 }}>
@@ -287,7 +284,7 @@ const Chat: React.FC = () => {
           </Box>
         </Paper>
       </Container>
-    </Box>
+    </div>
   );
 };
 
