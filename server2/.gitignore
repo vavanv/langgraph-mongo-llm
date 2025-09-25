@@ -1,0 +1,7 @@
+**/log.txt
+**/.DS_Store
+**/node_modules
+**/dist
+**/.env
+**/*lock*
+.DS_Store

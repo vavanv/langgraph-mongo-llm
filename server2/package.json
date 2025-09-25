@@ -1,0 +1,31 @@
+{
+  "name": "langgraph-mongo-qdrant-example",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "dev": "npx ts-node src/index.ts",
+    "seed": "npx ts-node src/tools/seed-database.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@langchain/anthropic": "^0.3.28",
+    "@langchain/core": "^0.3.77",
+    "@langchain/langgraph": "^0.4.9",
+    "@langchain/langgraph-checkpoint-mongodb": "^0.1.1",
+    "@qdrant/js-client-rest": "^1.15.1",
+    "dotenv": "^17.2.2",
+    "express": "^5.1.0",
+    "langchain": "^0.3.34",
+    "mongodb": "^6.20.0",
+    "zod": "^4.1.11"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.5.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.2"
+  }
+}
