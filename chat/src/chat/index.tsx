@@ -14,6 +14,7 @@ import {
   Avatar,
   Card,
   CardContent,
+  Button,
 } from "@mui/material";
 import { Send as SendIcon, Person as PersonIcon } from "@mui/icons-material";
 import { useStyles } from "./styles";
@@ -24,7 +25,7 @@ interface Message {
   timestamp: Date;
 }
 
-const Chat: React.FC = () => {
+const Chat = () => {
   const classes = useStyles();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
@@ -105,6 +106,11 @@ const Chat: React.FC = () => {
     }
   };
 
+  const clearChat = () => {
+    setMessages([]);
+    setThreadId(null);
+  };
+
   return (
     <div className={classes.container}>
       <Container
@@ -125,6 +131,24 @@ const Chat: React.FC = () => {
             overflow: "hidden",
           }}
         >
+          <Box
+            sx={{
+              position: "sticky",
+              top: 0,
+              zIndex: 1,
+              bgcolor: "background.paper",
+              p: 1,
+              display: "flex",
+              justifyContent: "flex-end",
+            }}
+          >
+            <Button variant="outlined" onClick={clearChat}>
+              Clear
+            </Button>
+          </Box>
+
+          <Divider />
+
           <Box sx={{ flex: 1, overflow: "auto", p: 1 }}>
             {messages.length === 0 ? (
               <Box
