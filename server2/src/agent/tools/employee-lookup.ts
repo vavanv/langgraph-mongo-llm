@@ -1,7 +1,6 @@
 import { OpenAIEmbeddings } from "@langchain/openai";
 import { tool } from "@langchain/core/tools";
 import { QdrantClient } from "@qdrant/js-client-rest";
-import { MongoClient } from "mongodb";
 import { z } from "zod";
 import "dotenv/config";
 
