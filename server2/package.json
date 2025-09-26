@@ -4,7 +4,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "npx ts-node src/index.ts",
-    "seed": "npx ts-node src/tools/seed-database.ts"
+    "seed": "npx ts-node src/db/seed-database.ts"
   },
   "keywords": [],
   "author": "",
