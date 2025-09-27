@@ -6,8 +6,15 @@ import { callAgent } from "./agent/agent";
 const app: Express = express();
 app.use(express.json());
 
-// Initialize MongoDB client
-const client = new MongoClient(process.env.MONGODB_ATLAS_URI as string);
+// Initialize MongoDB client with connection pooling
+const client = new MongoClient(process.env.MONGODB_ATLAS_URI as string, {
+  maxPoolSize: 10, // Maximum number of connections in the connection pool
+  minPoolSize: 5, // Minimum number of connections in the connection pool
+  maxIdleTimeMS: 30000, // Maximum time a connection can remain idle before being closed
+  serverSelectionTimeoutMS: 5000, // How long to wait for server selection
+  socketTimeoutMS: 45000, // How long to wait for socket operations
+  connectTimeoutMS: 10000, // How long to wait for initial connection
+});
 
 async function startServer() {
   try {
@@ -52,9 +59,26 @@ async function startServer() {
     });
 
     const PORT = process.env.PORT || 3000;
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
     });
+
+    // Graceful shutdown handling
+    const gracefulShutdown = async () => {
+      console.log(
+        "Received shutdown signal, closing server and database connections..."
+      );
+      server.close(async () => {
+        console.log("HTTP server closed");
+        await client.close();
+        console.log("MongoDB connection closed");
+        process.exit(0);
+      });
+    };
+
+    // Handle shutdown signals
+    process.on("SIGTERM", gracefulShutdown);
+    process.on("SIGINT", gracefulShutdown);
   } catch (error) {
     console.error("Error connecting to MongoDB:", error);
     process.exit(1);

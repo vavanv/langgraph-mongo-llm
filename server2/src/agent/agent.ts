@@ -9,10 +9,25 @@ import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { MongoDBSaver } from "@langchain/langgraph-checkpoint-mongodb";
 import { MongoClient } from "mongodb";
 import { employeeLookupTool } from "./tools/employee-lookup";
+import { StructuredToolInterface } from "@langchain/core/tools";
 import retry from "async-retry";
 import "dotenv/config";
 
+// Database configuration
 const DB_NAME = "hr_database";
+
+// Node names for the workflow graph
+enum NodeNames {
+  START = "__start__",
+  AGENT = "agent",
+  TOOLS = "tools",
+  END = "__end__",
+}
+
+// Type definitions for better type safety
+interface AgentState {
+  messages: BaseMessage[];
+}
 
 // Initialize static components
 const model = new ChatAnthropic({
@@ -26,7 +41,11 @@ function getEmployeeCollection(client: MongoClient) {
   return db.collection("employees");
 }
 
-async function callModel(state: any, tools: any[], model: any) {
+async function callModel(
+  state: AgentState,
+  tools: StructuredToolInterface[],
+  model: any
+) {
   try {
     const prompt = ChatPromptTemplate.fromMessages([
       [
@@ -41,6 +60,7 @@ You have access to the following tools: {tool_names}.\n{system_message}\nCurrent
       ],
       new MessagesPlaceholder("messages"),
     ]);
+
     const formattedPrompt = await prompt.formatMessages({
       system_message: "You are helpful HR Chatbot Agent.",
       time: new Date().toISOString(),
@@ -48,6 +68,7 @@ You have access to the following tools: {tool_names}.\n{system_message}\nCurrent
       messages: state.messages,
     });
     console.log(`API call: ${formattedPrompt.length} messages`);
+
     const result = await retry(
       async () => {
         const timeoutPromise = new Promise((_, reject) =>
@@ -63,6 +84,7 @@ You have access to the following tools: {tool_names}.\n{system_message}\nCurrent
       }
     );
     console.log(`API response tokens: ${result.content.length}`);
+
     return { messages: [result] };
   } catch (error) {
     console.error("Error in callModel:", error);
@@ -70,9 +92,43 @@ You have access to the following tools: {tool_names}.\n{system_message}\nCurrent
   }
 }
 
-function shouldContinue(state: any) {
+function shouldContinue(state: AgentState): string {
   const lastMessage = state.messages[state.messages.length - 1] as AIMessage;
-  return lastMessage.tool_calls?.length ? "tools" : "__end__";
+  return lastMessage.tool_calls?.length ? NodeNames.TOOLS : NodeNames.END;
+}
+
+/**
+ * Creates and compiles the LangGraph workflow
+ * @param tools - Array of tools to be used by the agent
+ * @param model - The bound language model
+ * @param client - MongoDB client for checkpointing
+ * @returns Compiled workflow application
+ */
+function createWorkflow(
+  tools: StructuredToolInterface[],
+  model: any,
+  client: MongoClient
+) {
+  // Define the graph state
+  const GraphState = Annotation.Root({
+    messages: Annotation<BaseMessage[]>({
+      reducer: (x, y) => x.concat(y),
+    }),
+  });
+
+  // Create the workflow graph
+  const workflow = new StateGraph(GraphState)
+    .addNode(NodeNames.AGENT, (state) => callModel(state, tools, model))
+    .addNode(NodeNames.TOOLS, new ToolNode<typeof GraphState.State>(tools))
+    .addEdge(NodeNames.START, NodeNames.AGENT)
+    .addConditionalEdges(NodeNames.AGENT, shouldContinue)
+    .addEdge(NodeNames.TOOLS, NodeNames.AGENT);
+
+  // Initialize the MongoDB memory to persist state between graph runs
+  const checkpointer = new MongoDBSaver({ client, dbName: DB_NAME });
+
+  // Compile and return the workflow
+  return workflow.compile({ checkpointer });
 }
 
 export async function callAgent(
@@ -83,25 +139,11 @@ export async function callAgent(
   try {
     const collection = getEmployeeCollection(client);
     const employeeLookup = employeeLookupTool(collection);
-    const tools = [employeeLookup];
-    const toolNode = new ToolNode<typeof GraphState.State>(tools);
+    const tools: StructuredToolInterface[] = [employeeLookup];
     const boundModel = model.bindTools(tools);
 
-    const GraphState = Annotation.Root({
-      messages: Annotation<BaseMessage[]>({
-        reducer: (x, y) => x.concat(y),
-      }),
-    });
-
-    const workflow = new StateGraph(GraphState)
-      .addNode("agent", (state) => callModel(state, tools, boundModel))
-      .addNode("tools", toolNode)
-      .addEdge("__start__", "agent")
-      .addConditionalEdges("agent", shouldContinue)
-      .addEdge("tools", "agent");
-
-    const checkpointer = new MongoDBSaver({ client, dbName: DB_NAME });
-    const app = workflow.compile({ checkpointer });
+    // Create the workflow using the extracted function
+    const app = createWorkflow(tools, boundModel, client);
 
     const finalState = await retry(
       async () => {
