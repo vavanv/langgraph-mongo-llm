@@ -24,9 +24,72 @@ enum NodeNames {
   END = "__end__",
 }
 
+// Configuration constants
+const CONFIG = {
+  // Timeout values (in milliseconds)
+  MODEL_TIMEOUT: 10000,
+  WORKFLOW_TIMEOUT: 30000,
+
+  // Retry configuration
+  MAX_MODEL_RETRIES: 3,
+  MAX_WORKFLOW_RETRIES: 2,
+  RETRY_FACTOR: 2,
+  RETRY_MIN_TIMEOUT: 1000,
+  RETRY_MAX_TIMEOUT: 5000,
+
+  // Workflow limits
+  RECURSION_LIMIT: 5,
+  MAX_QUERY_LENGTH: 1000,
+  MAX_THREAD_ID_LENGTH: 100,
+} as const;
+
+// System prompt template
+const SYSTEM_PROMPT = `You are a helpful AI assistant, collaborating with other assistants.
+Use the provided tools to progress towards answering the question.
+If you are unable to fully answer, that's OK, another assistant with different tools will help where you left off.
+Execute what you can to make progress.
+If you or any of the other assistants have the final answer or deliverable,
+prefix your response with FINAL ANSWER so the team knows to stop.
+You have access to the following tools: {tool_names}.
+{system_message}
+Current time: {time}.`;
+
 // Type definitions for better type safety
 interface AgentState {
   messages: BaseMessage[];
+}
+
+// Custom error types for better error handling
+class AgentError extends Error {
+  constructor(
+    message: string,
+    public code: string,
+    public statusCode: number = 500
+  ) {
+    super(message);
+    this.name = "AgentError";
+  }
+}
+
+class ValidationError extends AgentError {
+  constructor(message: string) {
+    super(message, "VALIDATION_ERROR", 400);
+    this.name = "ValidationError";
+  }
+}
+
+class ModelTimeoutError extends AgentError {
+  constructor(message: string = "Model request timed out") {
+    super(message, "MODEL_TIMEOUT", 504);
+    this.name = "ModelTimeoutError";
+  }
+}
+
+class WorkflowError extends AgentError {
+  constructor(message: string = "Workflow execution failed") {
+    super(message, "WORKFLOW_ERROR", 500);
+    this.name = "WorkflowError";
+  }
 }
 
 // Initialize static components
@@ -48,16 +111,7 @@ async function callModel(
 ) {
   try {
     const prompt = ChatPromptTemplate.fromMessages([
-      [
-        "system",
-        `You are a helpful AI assistant, collaborating with other assistants.
-Use the provided tools to progress towards answering the question.
-If you are unable to fully answer, that's OK, another assistant with different tools will help where you left off.
-Execute what you can to make progress.
-If you or any of the other assistants have the final answer or deliverable,
-prefix your response with FINAL ANSWER so the team knows to stop.
-You have access to the following tools: {tool_names}.\n{system_message}\nCurrent time: {time}.`,
-      ],
+      ["system", SYSTEM_PROMPT],
       new MessagesPlaceholder("messages"),
     ]);
 
@@ -72,15 +126,18 @@ You have access to the following tools: {tool_names}.\n{system_message}\nCurrent
     const result = await retry(
       async () => {
         const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Model timeout")), 10000)
+          setTimeout(
+            () => reject(new Error("Model timeout")),
+            CONFIG.MODEL_TIMEOUT
+          )
         );
         return Promise.race([model.invoke(formattedPrompt), timeoutPromise]);
       },
       {
-        retries: 3,
-        factor: 2,
-        minTimeout: 1000,
-        maxTimeout: 5000,
+        retries: CONFIG.MAX_MODEL_RETRIES,
+        factor: CONFIG.RETRY_FACTOR,
+        minTimeout: CONFIG.RETRY_MIN_TIMEOUT,
+        maxTimeout: CONFIG.RETRY_MAX_TIMEOUT,
       }
     );
     console.log(`API response tokens: ${result.content.length}`);
@@ -88,6 +145,9 @@ You have access to the following tools: {tool_names}.\n{system_message}\nCurrent
     return { messages: [result] };
   } catch (error) {
     console.error("Error in callModel:", error);
+    if (error instanceof Error && error.message.includes("timeout")) {
+      throw new ModelTimeoutError();
+    }
     return { messages: [new AIMessage("Error: Unable to process request.")] };
   }
 }
@@ -131,12 +191,40 @@ function createWorkflow(
   return workflow.compile({ checkpointer });
 }
 
+/**
+ * Validates input parameters for the agent
+ * @param query - The user query string
+ * @param thread_id - The thread identifier
+ * @throws ValidationError if validation fails
+ */
+function validateInputs(query: string, thread_id: string): void {
+  if (!query || typeof query !== "string") {
+    throw new ValidationError("Query must be a non-empty string");
+  }
+  if (query.length > CONFIG.MAX_QUERY_LENGTH) {
+    throw new ValidationError(
+      `Query too long. Maximum length is ${CONFIG.MAX_QUERY_LENGTH} characters`
+    );
+  }
+  if (!thread_id || typeof thread_id !== "string") {
+    throw new ValidationError("Thread ID must be a non-empty string");
+  }
+  if (thread_id.length > CONFIG.MAX_THREAD_ID_LENGTH) {
+    throw new ValidationError(
+      `Thread ID too long. Maximum length is ${CONFIG.MAX_THREAD_ID_LENGTH} characters`
+    );
+  }
+}
+
 export async function callAgent(
   client: MongoClient,
   query: string,
   thread_id: string
 ) {
   try {
+    // Validate inputs
+    validateInputs(query, thread_id);
+
     const collection = getEmployeeCollection(client);
     const employeeLookup = employeeLookupTool(collection);
     const tools: StructuredToolInterface[] = [employeeLookup];
@@ -148,17 +236,28 @@ export async function callAgent(
     const finalState = await retry(
       async () => {
         const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Workflow timeout")), 30000)
+          setTimeout(
+            () => reject(new Error("Workflow timeout")),
+            CONFIG.WORKFLOW_TIMEOUT
+          )
         );
         return Promise.race([
           app.invoke(
             { messages: [new HumanMessage(query)] },
-            { recursionLimit: 5, configurable: { thread_id: thread_id } }
+            {
+              recursionLimit: CONFIG.RECURSION_LIMIT,
+              configurable: { thread_id: thread_id },
+            }
           ),
           timeoutPromise,
         ]);
       },
-      { retries: 2, factor: 2, minTimeout: 1000, maxTimeout: 5000 }
+      {
+        retries: CONFIG.MAX_WORKFLOW_RETRIES,
+        factor: CONFIG.RETRY_FACTOR,
+        minTimeout: CONFIG.RETRY_MIN_TIMEOUT,
+        maxTimeout: CONFIG.RETRY_MAX_TIMEOUT,
+      }
     );
 
     const finalStateTyped = finalState as { messages: BaseMessage[] };
@@ -168,6 +267,20 @@ export async function callAgent(
     return finalMessage;
   } catch (error) {
     console.error("Error in callAgent:", error);
-    return "Sorry, something went wrong while processing your request.";
+
+    if (error instanceof ValidationError) {
+      return `Validation Error: ${error.message}`;
+    }
+
+    if (error instanceof ModelTimeoutError) {
+      return "The request timed out. Please try again with a simpler query.";
+    }
+
+    if (error instanceof WorkflowError) {
+      return "There was an issue processing your request. Please try again.";
+    }
+
+    // For any other unexpected errors
+    return "Sorry, something went wrong while processing your request. Please try again later.";
   }
 }
