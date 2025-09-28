@@ -7,6 +7,8 @@ import {
 import { StateGraph, Annotation } from "@langchain/langgraph";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { MongoDBSaver } from "@langchain/langgraph-checkpoint-mongodb";
+import { BaseChatModel } from "@langchain/core/language_models/chat_models";
+import { Runnable } from "@langchain/core/runnables";
 import { MongoClient } from "mongodb";
 import { employeeLookupTool } from "./tools/employee-lookup";
 import { StructuredToolInterface } from "@langchain/core/tools";
@@ -62,7 +64,7 @@ function getEmployeeCollection(client: MongoClient) {
 async function callModel(
   state: AgentState,
   tools: StructuredToolInterface[],
-  model: any
+  model: Runnable
 ) {
   try {
     const prompt = ChatPromptTemplate.fromMessages([
@@ -115,13 +117,13 @@ function shouldContinue(state: AgentState): string {
 /**
  * Creates and compiles the LangGraph workflow
  * @param tools - Array of tools to be used by the agent
- * @param model - The bound language model
+ * @param model - The language model
  * @param client - MongoDB client for checkpointing
  * @returns Compiled workflow application
  */
 function createWorkflow(
   tools: StructuredToolInterface[],
-  model: any,
+  model: BaseChatModel,
   client: MongoClient
 ) {
   // Define the graph state
@@ -131,9 +133,12 @@ function createWorkflow(
     }),
   });
 
+  // Bind tools to the model
+  const boundModel = model.bindTools!(tools);
+
   // Create the workflow graph
   const workflow = new StateGraph(GraphState)
-    .addNode(NodeNames.AGENT, (state) => callModel(state, tools, model))
+    .addNode(NodeNames.AGENT, (state) => callModel(state, tools, boundModel))
     .addNode(NodeNames.TOOLS, new ToolNode<typeof GraphState.State>(tools))
     .addEdge(NodeNames.START, NodeNames.AGENT)
     .addConditionalEdges(NodeNames.AGENT, shouldContinue)
@@ -183,10 +188,9 @@ export async function callAgent(
     const collection = getEmployeeCollection(client);
     const employeeLookup = employeeLookupTool(collection);
     const tools: StructuredToolInterface[] = [employeeLookup];
-    const boundModel = model.bindTools(tools);
 
     // Create the workflow using the extracted function
-    const app = createWorkflow(tools, boundModel, client);
+    const app = createWorkflow(tools, model, client);
 
     const finalState = await retry(
       async () => {
