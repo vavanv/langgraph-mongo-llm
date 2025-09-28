@@ -1,10 +1,11 @@
 import { OpenAIEmbeddings } from "@langchain/openai";
 import { tool } from "@langchain/core/tools";
 import { QdrantClient } from "@qdrant/js-client-rest";
+import { Collection } from "mongodb";
 import { z } from "zod";
 import "dotenv/config";
 
-export const employeeLookupTool = (collection: any) =>
+export const employeeLookupTool = (collection: Collection) =>
   tool(
     async (input: unknown) => {
       const { query, n = 100 } = input as { query: string; n?: number };
