@@ -47,6 +47,10 @@ This is a server implementation that uses MongoDB for employee data storage and 
 - **GET /**: Basic health check endpoint
 - **Response**: `{"message": "LangGraph Agent Server with Qdrant"}`
 
+- **GET /health**: Comprehensive health check endpoint
+- **Response**: `{"status": "healthy", "timestamp": "ISO_DATE", "services": {"mongo": {"status": "healthy"}, "qdrant": {"status": "healthy"}}}`
+- **Status Codes**: 200 (healthy), 503 (unhealthy/degraded)
+
 ### Chat Endpoints
 - **POST /chat**: Start a new conversation
   - **Request Body**: `{"message": "your query here"}`

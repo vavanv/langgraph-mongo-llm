@@ -1,34 +1,44 @@
 import "dotenv/config";
 import express, { Express, Request, Response } from "express";
 import { MongoClient } from "mongodb";
+import { QdrantClient } from "@qdrant/js-client-rest";
 import { callAgent } from "./agent/agent";
 import { z } from "zod";
+import { logger } from "./utils/logger";
 
 const app: Express = express();
 app.use(express.json());
 
 // Input validation schemas
 const chatRequestSchema = z.object({
-  message: z.string().min(1, "Message cannot be empty").max(1000, "Message too long"),
+  message: z
+    .string()
+    .min(1, "Message cannot be empty")
+    .max(1000, "Message too long"),
 });
 
-const threadIdSchema = z.string().min(1, "Thread ID cannot be empty").max(100, "Thread ID too long");
+const threadIdSchema = z
+  .string()
+  .min(1, "Thread ID cannot be empty")
+  .max(100, "Thread ID too long");
 
 // Environment variable validation
 function validateEnvironmentVariables() {
   const requiredVars = [
-    'MONGODB_ATLAS_URI',
-    'ANTHROPIC_API_KEY',
-    'OPENAI_API_KEY'
+    "MONGODB_ATLAS_URI",
+    "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
   ];
 
-  const missingVars = requiredVars.filter(varName => !process.env[varName]);
+  const missingVars = requiredVars.filter((varName) => !process.env[varName]);
 
   if (missingVars.length > 0) {
-    throw new Error(`Missing required environment variables: ${missingVars.join(', ')}`);
+    throw new Error(
+      `Missing required environment variables: ${missingVars.join(", ")}`
+    );
   }
 
-  console.log('Environment variables validated successfully');
+  console.log("Environment variables validated successfully");
 }
 
 // Initialize MongoDB client with connection pooling
@@ -58,6 +68,59 @@ async function startServer() {
       res.send("LangGraph Agent Server with Qdrant");
     });
 
+    // Health check endpoint
+    // curl -X GET http://localhost:3000/health
+    app.get("/health", async (_: Request, res: Response) => {
+      try {
+        const healthStatus: any = {
+          status: "healthy",
+          timestamp: new Date().toISOString(),
+          services: {},
+        };
+
+        // Check MongoDB connection
+        try {
+          await client.db("admin").command({ ping: 1 });
+          healthStatus.services.mongo = { status: "healthy" };
+        } catch (error) {
+          healthStatus.services.mongo = {
+            status: "unhealthy",
+            error: (error as Error).message,
+          };
+          healthStatus.status = "degraded";
+        }
+
+        // Check Qdrant connection
+        try {
+          const qdrantClient = new QdrantClient({
+            url: process.env.QDRANT_URL || "http://localhost:6333",
+            apiKey: process.env.QDRANT_API_KEY,
+          });
+          await qdrantClient.getCollections();
+          healthStatus.services.qdrant = { status: "healthy" };
+        } catch (error) {
+          healthStatus.services.qdrant = {
+            status: "unhealthy",
+            error: (error as Error).message,
+          };
+          healthStatus.status = "degraded";
+        }
+
+        // Return appropriate status code
+        const statusCode = healthStatus.status === "healthy" ? 200 : 503;
+        res.status(statusCode).json(healthStatus);
+
+        logger.info(`Health check completed: ${healthStatus.status}`);
+      } catch (error) {
+        logger.error("Health check failed:", error);
+        res.status(503).json({
+          status: "unhealthy",
+          timestamp: new Date().toISOString(),
+          error: (error as Error).message,
+        });
+      }
+    });
+
     // API endpoint to start a new conversation
     // curl -X POST -H "Content-Type: application/json" -d '{"message": "Build a team to make an iOS app, and tell me the talent gaps."}' http://localhost:3000/chat
     app.post("/chat", async (req: Request, res: Response) => {
@@ -68,7 +131,9 @@ async function startServer() {
         res.json({ threadId, response });
       } catch (error) {
         if (error instanceof z.ZodError) {
-          res.status(400).json({ error: "Invalid request", details: error.issues });
+          res
+            .status(400)
+            .json({ error: "Invalid request", details: error.issues });
         } else {
           console.error("Error starting conversation:", error);
           res.status(500).json({ error: "Internal server error" });
@@ -86,7 +151,9 @@ async function startServer() {
         res.json({ response });
       } catch (error) {
         if (error instanceof z.ZodError) {
-          res.status(400).json({ error: "Invalid request", details: error.issues });
+          res
+            .status(400)
+            .json({ error: "Invalid request", details: error.issues });
         } else {
           console.error("Error in chat:", error);
           res.status(500).json({ error: "Internal server error" });
