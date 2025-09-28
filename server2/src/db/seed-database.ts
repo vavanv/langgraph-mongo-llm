@@ -4,6 +4,7 @@ import { QdrantClient } from "@qdrant/js-client-rest";
 import { MongoClient } from "mongodb";
 import { z } from "zod";
 import "dotenv/config";
+import { logger } from "../utils/logger";
 
 const client = new MongoClient(process.env.MONGODB_ATLAS_URI as string);
 
@@ -88,7 +89,7 @@ Each employee must have:
 
 Ensure variety in departments, job titles, and realistic values. Return ONLY a valid JSON array of employee objects with no additional text or formatting.`;
 
-  console.log("Generating synthetic data...");
+  logger.info("Generating synthetic data...");
 
   const response = await llm.invoke(prompt);
   const content = response.content as string;
@@ -111,9 +112,9 @@ Ensure variety in departments, job titles, and realistic values. Return ONLY a v
   try {
     parsed = JSON.parse(jsonString);
   } catch (error) {
-    console.error("Failed to parse LLM response as JSON:", error);
-    console.error("Extracted content:", jsonString);
-    console.error("Raw content:", content);
+   logger.error("Failed to parse LLM response as JSON:", error);
+   logger.debug("Extracted content:", jsonString);
+   logger.debug("Raw content:", content);
     throw new Error("LLM did not return valid JSON");
   }
 
@@ -144,7 +145,7 @@ async function seedDatabase(): Promise<void> {
   try {
     await client.connect();
     await client.db("admin").command({ ping: 1 });
-    console.log(
+    logger.info(
       "Pinged your deployment. You successfully connected to MongoDB!"
     );
 
@@ -157,7 +158,7 @@ async function seedDatabase(): Promise<void> {
 
     // Store full employee data in MongoDB
     await collection.insertMany(syntheticData);
-    console.log("Employee data stored in MongoDB");
+    logger.info("Employee data stored in MongoDB");
 
     // Initialize embeddings
     const embeddings = new OpenAIEmbeddings();
@@ -175,7 +176,7 @@ async function seedDatabase(): Promise<void> {
       });
     } catch (error) {
       // Collection might already exist
-      console.log("Collection might already exist:", error);
+      logger.warn("Collection might already exist:", error);
     }
 
     // Prepare points for Qdrant
@@ -198,13 +199,13 @@ async function seedDatabase(): Promise<void> {
     // Upsert points to Qdrant
     await qdrantClient.upsert("employees", { points });
 
-    console.log("Vector data stored in Qdrant");
-    console.log("Database seeding completed");
+    logger.info("Vector data stored in Qdrant");
+    logger.info("Database seeding completed");
   } catch (error) {
-    console.error("Error seeding database:", error);
+    logger.error("Error seeding database:", error);
   } finally {
     await client.close();
   }
 }
 
-seedDatabase().catch(console.error);
+seedDatabase().catch(logger.error);

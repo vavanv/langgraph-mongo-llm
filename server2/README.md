@@ -12,13 +12,17 @@ This is a server implementation that uses MongoDB for employee data storage and 
 
 2. Set up environment variables in a `.env` file:
 
-   ```
-   MONGODB_ATLAS_URI=your_mongodb_connection_string
-   QDRANT_URL=http://localhost:6333
-   OPENAI_API_KEY=your_openai_api_key
-   ANTHROPIC_API_KEY=your_anthropic_api_key
-   PORT=3000
-   ```
+    ```
+    MONGODB_ATLAS_URI=your_mongodb_connection_string
+    QDRANT_URL=http://localhost:6333
+    OPENAI_API_KEY=your_openai_api_key
+    ANTHROPIC_API_KEY=your_anthropic_api_key
+    PORT=3000
+    QDRANT_API_KEY=your_qdrant_api_key  # Optional, for cloud Qdrant
+    ```
+
+    **Required Variables**: `MONGODB_ATLAS_URI`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`
+    The server will validate these on startup and fail with clear error messages if missing.
 
 3. Start Qdrant (if running locally):
 
@@ -39,9 +43,36 @@ This is a server implementation that uses MongoDB for employee data storage and 
 
 ## API Endpoints
 
-- `GET /`: Health check
-- `POST /chat`: Start a new conversation
-- `POST /chat/:threadId`: Continue an existing conversation
+### Health Check
+- **GET /**: Basic health check endpoint
+- **Response**: `{"message": "LangGraph Agent Server with Qdrant"}`
+
+### Chat Endpoints
+- **POST /chat**: Start a new conversation
+  - **Request Body**: `{"message": "your query here"}`
+  - **Response**: `{"threadId": "timestamp", "response": "agent reply"}`
+  - **Validation**: Message must be 1-1000 characters
+
+- **POST /chat/:threadId**: Continue an existing conversation
+  - **Request Body**: `{"message": "follow-up query"}`
+  - **Response**: `{"response": "agent reply"}`
+  - **Validation**: Thread ID (1-100 chars), message (1-1000 chars)
+
+### Error Responses
+- **400 Bad Request**: Invalid input validation
+  ```json
+  {
+    "error": "Invalid request",
+    "details": [
+      {
+        "code": "too_small",
+        "message": "Message cannot be empty",
+        "path": ["message"]
+      }
+    ]
+  }
+  ```
+- **500 Internal Server Error**: Server-side errors
 
 ## Technical Architecture
 
@@ -129,12 +160,47 @@ Employee data structure includes:
 
 **Server Features**:
 
-- JSON middleware for request parsing
-- Error handling with 500 status for failures
-- Thread ID generation using timestamps
-- MongoDB connection management
+- **Input Validation**: Comprehensive request validation using Zod schemas
+- **Environment Validation**: Automatic validation of required environment variables on startup
+- **Error Handling**: Detailed error responses with validation details
+- **Connection Management**: MongoDB connection pooling with graceful shutdown
+- **Thread Management**: Automatic thread ID generation and conversation persistence
+- **Type Safety**: Full TypeScript implementation with strict type checking
 
-**Dependencies**: `express`, `mongodb`
+**Dependencies**: `express`, `mongodb`, `zod`
+
+## Configuration
+
+The application uses a centralized configuration system in `src/agent/config/config.ts`:
+
+- **Database Settings**: Database name, timeouts, retry policies
+- **Workflow Limits**: Recursion limits, query length constraints
+- **Retry Configuration**: Model and workflow retry settings
+
+All configuration values are defined as `const` assertions for type safety.
+
+## Recent Improvements
+
+### Logging System
+- Implemented structured logging with Winston
+- Multiple log levels (error, warn, info, http, debug)
+- Console output with colors and timestamps
+- File logging (combined.log and error.log)
+- Configurable log level via LOG_LEVEL environment variable
+
+### Type Safety Enhancements
+- Replaced `any` types with proper LangChain and MongoDB types
+- Added comprehensive TypeScript interfaces
+- Improved IntelliSense and compile-time error detection
+
+### Input Validation & Security
+- Implemented Zod-based request validation for all API endpoints
+- Added environment variable validation on startup
+- Enhanced error responses with detailed validation messages
+
+### Configuration Management
+- Moved hardcoded values to centralized config
+- Improved maintainability for different environments
 
 ## Differences from Original Server
 

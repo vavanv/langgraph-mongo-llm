@@ -20,6 +20,7 @@ import {
   ModelTimeoutError,
   WorkflowError,
 } from "./config/errors";
+import { logger } from "../utils/logger";
 
 // Node names for the workflow graph
 enum NodeNames {
@@ -74,7 +75,7 @@ async function callModel(
       tool_names: tools.map((tool) => tool.name).join(", "),
       messages: state.messages,
     });
-    console.log(`API call: ${formattedPrompt.length} messages`);
+    logger.debug(`API call: ${formattedPrompt.length} messages`);
 
     const result = await retry(
       async () => {
@@ -93,11 +94,11 @@ async function callModel(
         maxTimeout: CONFIG.RETRY_MAX_TIMEOUT,
       }
     );
-    console.log(`API response tokens: ${result.content.length}`);
+    logger.debug(`API response tokens: ${result.content.length}`);
 
     return { messages: [result] };
   } catch (error) {
-    console.error("Error in callModel:", error);
+    logger.error("Error in callModel:", error);
     if (error instanceof Error && error.message.includes("timeout")) {
       throw new ModelTimeoutError();
     }
@@ -221,10 +222,10 @@ export async function callAgent(
     const finalStateTyped = finalState as { messages: BaseMessage[] };
     const finalMessage =
       finalStateTyped.messages[finalStateTyped.messages.length - 1].content;
-    console.log(`Final response: ${finalMessage}`);
+    logger.info(`Final response: ${finalMessage}`);
     return finalMessage;
   } catch (error) {
-    console.error("Error in callAgent:", error);
+   logger.error("Error in callAgent:", error);
 
     if (error instanceof ValidationError) {
       return `Validation Error: ${error.message}`;

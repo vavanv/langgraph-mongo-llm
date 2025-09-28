@@ -4,12 +4,14 @@ import { QdrantClient } from "@qdrant/js-client-rest";
 import { Collection } from "mongodb";
 import { z } from "zod";
 import "dotenv/config";
+import { logger } from "../../utils/logger";
 
 export const employeeLookupTool = (collection: Collection) =>
   tool(
     async (input: unknown) => {
+      logger.debug(`Employee lookup tool input: ${JSON.stringify(input)}`);
       const { query, n = 100 } = input as { query: string; n?: number };
-      console.log("Employee lookup tool called with query:", query);
+      logger.info(`Employee lookup tool called with query: "${query}"`);
 
       try {
         // Initialize embeddings
@@ -17,9 +19,8 @@ export const employeeLookupTool = (collection: Collection) =>
 
         // Embed the query
         const queryEmbedding = await embeddings.embedQuery(query);
-        console.log(
-          "Query embedded successfully, vector length:",
-          queryEmbedding.length
+        logger.debug(
+          `Query embedded successfully, vector length: ${queryEmbedding.length}`
         );
 
         // Initialize Qdrant client
@@ -28,7 +29,7 @@ export const employeeLookupTool = (collection: Collection) =>
           apiKey: process.env.QDRANT_API_KEY,
         });
 
-        console.log("Searching Qdrant for:", query);
+        logger.debug(`Searching Qdrant for: ${query}`);
         // Search for similar vectors
         const searchResult = await qdrantClient.search("employees", {
           vector: queryEmbedding,
@@ -36,7 +37,7 @@ export const employeeLookupTool = (collection: Collection) =>
           with_payload: true,
         });
 
-        console.log("Qdrant search returned", searchResult.length, "results");
+        logger.debug(`Qdrant search returned ${searchResult.length} results`);
 
         if (searchResult.length === 0) {
           // Try to get collection info to debug
@@ -44,9 +45,9 @@ export const employeeLookupTool = (collection: Collection) =>
             const collectionInfo = await qdrantClient.getCollection(
               "employees"
             );
-            console.log("Collection info:", collectionInfo);
+            logger.debug("Collection info:", collectionInfo);
           } catch (error) {
-            console.log("Error getting collection info:", error);
+            logger.warn("Error getting collection info:", error);
           }
         }
 
@@ -54,11 +55,11 @@ export const employeeLookupTool = (collection: Collection) =>
         const enrichedResults = await Promise.all(
           searchResult.map(async (point) => {
             const employeeId = point.payload?.employee_id;
-            console.log("Looking up employee:", employeeId);
+            logger.debug(`Looking up employee: ${employeeId}`);
             const employeeData = await collection.findOne({
               employee_id: employeeId,
             });
-            console.log("Found employee data:", !!employeeData);
+            logger.debug(`Found employee data: ${!!employeeData}`);
             return {
               score: point.score,
               summary: point.payload?.summary,
@@ -67,10 +68,10 @@ export const employeeLookupTool = (collection: Collection) =>
           })
         );
 
-        console.log("Returning", enrichedResults.length, "enriched results");
+        logger.info(`Returning ${enrichedResults.length} enriched results`);
         return JSON.stringify(enrichedResults);
       } catch (error) {
-        console.error("Error in employee lookup tool:", error);
+        logger.error("Error in employee lookup tool:", error);
         return JSON.stringify({ error: (error as Error).message, query });
       }
     },
