@@ -1,26 +1,13 @@
 import "dotenv/config";
-import express, { Express, Request, Response } from "express";
+import express, { Express } from "express";
 import { MongoClient } from "mongodb";
-import { QdrantClient } from "@qdrant/js-client-rest";
-import { callAgent } from "./agent/agent";
-import { z } from "zod";
 import { logger } from "./utils/logger";
+import indexRoutes from "./routes/index";
+import healthRoutes from "./routes/health";
+import chatRoutes, { setMongoClient } from "./routes/chat";
 
 const app: Express = express();
 app.use(express.json());
-
-// Input validation schemas
-const chatRequestSchema = z.object({
-  message: z
-    .string()
-    .min(1, "Message cannot be empty")
-    .max(1000, "Message too long"),
-});
-
-const threadIdSchema = z
-  .string()
-  .min(1, "Thread ID cannot be empty")
-  .max(100, "Thread ID too long");
 
 // Environment variable validation
 function validateEnvironmentVariables() {
@@ -62,104 +49,13 @@ async function startServer() {
       "Pinged your deployment. You successfully connected to MongoDB!"
     );
 
-    // Set up basic Express route
-    // curl -X GET http://localhost:3000/
-    app.get("/", (_: Request, res: Response) => {
-      res.send("LangGraph Agent Server with Qdrant");
-    });
+    // Set MongoDB client for chat routes
+    setMongoClient(client);
 
-    // Health check endpoint
-    // curl -X GET http://localhost:3000/health
-    app.get("/health", async (_: Request, res: Response) => {
-      try {
-        const healthStatus: any = {
-          status: "healthy",
-          timestamp: new Date().toISOString(),
-          services: {},
-        };
-
-        // Check MongoDB connection
-        try {
-          await client.db("admin").command({ ping: 1 });
-          healthStatus.services.mongo = { status: "healthy" };
-        } catch (error) {
-          healthStatus.services.mongo = {
-            status: "unhealthy",
-            error: (error as Error).message,
-          };
-          healthStatus.status = "degraded";
-        }
-
-        // Check Qdrant connection
-        try {
-          const qdrantClient = new QdrantClient({
-            url: process.env.QDRANT_URL || "http://localhost:6333",
-            apiKey: process.env.QDRANT_API_KEY,
-          });
-          await qdrantClient.getCollections();
-          healthStatus.services.qdrant = { status: "healthy" };
-        } catch (error) {
-          healthStatus.services.qdrant = {
-            status: "unhealthy",
-            error: (error as Error).message,
-          };
-          healthStatus.status = "degraded";
-        }
-
-        // Return appropriate status code
-        const statusCode = healthStatus.status === "healthy" ? 200 : 503;
-        res.status(statusCode).json(healthStatus);
-
-        logger.info(`Health check completed: ${healthStatus.status}`);
-      } catch (error) {
-        logger.error("Health check failed:", error);
-        res.status(503).json({
-          status: "unhealthy",
-          timestamp: new Date().toISOString(),
-          error: (error as Error).message,
-        });
-      }
-    });
-
-    // API endpoint to start a new conversation
-    // curl -X POST -H "Content-Type: application/json" -d '{"message": "Build a team to make an iOS app, and tell me the talent gaps."}' http://localhost:3000/chat
-    app.post("/chat", async (req: Request, res: Response) => {
-      try {
-        const { message } = chatRequestSchema.parse(req.body);
-        const threadId = Date.now().toString(); // Simple thread ID generation
-        const response = await callAgent(client, message, threadId);
-        res.json({ threadId, response });
-      } catch (error) {
-        if (error instanceof z.ZodError) {
-          res
-            .status(400)
-            .json({ error: "Invalid request", details: error.issues });
-        } else {
-          console.error("Error starting conversation:", error);
-          res.status(500).json({ error: "Internal server error" });
-        }
-      }
-    });
-
-    // API endpoint to send a message in an existing conversation
-    // curl -X POST -H "Content-Type: application/json" -d '{"message": "What team members did you recommend?"}' http://localhost:3000/chat/123456789
-    app.post("/chat/:threadId", async (req: Request, res: Response) => {
-      try {
-        const threadId = threadIdSchema.parse(req.params.threadId);
-        const { message } = chatRequestSchema.parse(req.body);
-        const response = await callAgent(client, message, threadId);
-        res.json({ response });
-      } catch (error) {
-        if (error instanceof z.ZodError) {
-          res
-            .status(400)
-            .json({ error: "Invalid request", details: error.issues });
-        } else {
-          console.error("Error in chat:", error);
-          res.status(500).json({ error: "Internal server error" });
-        }
-      }
-    });
+    // Mount routes
+    app.use("/", indexRoutes);
+    app.use("/health", healthRoutes);
+    app.use("/chat", chatRoutes);
 
     const PORT = process.env.PORT || 3000;
     const server = app.listen(PORT, () => {
