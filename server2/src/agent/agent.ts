@@ -12,6 +12,13 @@ import { employeeLookupTool } from "./tools/employee-lookup";
 import { StructuredToolInterface } from "@langchain/core/tools";
 import retry from "async-retry";
 import "dotenv/config";
+import { CONFIG } from "./config/config";
+import {
+  AgentError,
+  ValidationError,
+  ModelTimeoutError,
+  WorkflowError,
+} from "./config/errors";
 
 // Database configuration
 const DB_NAME = "hr_database";
@@ -23,25 +30,6 @@ enum NodeNames {
   TOOLS = "tools",
   END = "__end__",
 }
-
-// Configuration constants
-const CONFIG = {
-  // Timeout values (in milliseconds)
-  MODEL_TIMEOUT: 10000,
-  WORKFLOW_TIMEOUT: 30000,
-
-  // Retry configuration
-  MAX_MODEL_RETRIES: 3,
-  MAX_WORKFLOW_RETRIES: 2,
-  RETRY_FACTOR: 2,
-  RETRY_MIN_TIMEOUT: 1000,
-  RETRY_MAX_TIMEOUT: 5000,
-
-  // Workflow limits
-  RECURSION_LIMIT: 5,
-  MAX_QUERY_LENGTH: 1000,
-  MAX_THREAD_ID_LENGTH: 100,
-} as const;
 
 // System prompt template
 const SYSTEM_PROMPT = `You are a helpful AI assistant, collaborating with other assistants.
@@ -57,39 +45,6 @@ Current time: {time}.`;
 // Type definitions for better type safety
 interface AgentState {
   messages: BaseMessage[];
-}
-
-// Custom error types for better error handling
-class AgentError extends Error {
-  constructor(
-    message: string,
-    public code: string,
-    public statusCode: number = 500
-  ) {
-    super(message);
-    this.name = "AgentError";
-  }
-}
-
-class ValidationError extends AgentError {
-  constructor(message: string) {
-    super(message, "VALIDATION_ERROR", 400);
-    this.name = "ValidationError";
-  }
-}
-
-class ModelTimeoutError extends AgentError {
-  constructor(message: string = "Model request timed out") {
-    super(message, "MODEL_TIMEOUT", 504);
-    this.name = "ModelTimeoutError";
-  }
-}
-
-class WorkflowError extends AgentError {
-  constructor(message: string = "Workflow execution failed") {
-    super(message, "WORKFLOW_ERROR", 500);
-    this.name = "WorkflowError";
-  }
 }
 
 // Initialize static components
