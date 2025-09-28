@@ -1,5 +1,8 @@
 // Configuration constants
 export const CONFIG = {
+  // Database configuration
+  DATABASE_NAME: "hr_database",
+
   // Timeout values (in milliseconds)
   MODEL_TIMEOUT: 10000,
   WORKFLOW_TIMEOUT: 30000,

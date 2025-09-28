@@ -16,14 +16,10 @@ import retry from "async-retry";
 import "dotenv/config";
 import { CONFIG } from "./config/config";
 import {
-  AgentError,
   ValidationError,
   ModelTimeoutError,
   WorkflowError,
 } from "./config/errors";
-
-// Database configuration
-const DB_NAME = "hr_database";
 
 // Node names for the workflow graph
 enum NodeNames {
@@ -57,7 +53,7 @@ const model = new ChatAnthropic({
 });
 
 function getEmployeeCollection(client: MongoClient) {
-  const db = client.db(DB_NAME);
+  const db = client.db(CONFIG.DATABASE_NAME);
   return db.collection("employees");
 }
 
@@ -145,7 +141,10 @@ function createWorkflow(
     .addEdge(NodeNames.TOOLS, NodeNames.AGENT);
 
   // Initialize the MongoDB memory to persist state between graph runs
-  const checkpointer = new MongoDBSaver({ client, dbName: DB_NAME });
+  const checkpointer = new MongoDBSaver({
+    client,
+    dbName: CONFIG.DATABASE_NAME,
+  });
 
   // Compile and return the workflow
   return workflow.compile({ checkpointer });

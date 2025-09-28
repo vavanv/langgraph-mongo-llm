@@ -2,9 +2,34 @@ import "dotenv/config";
 import express, { Express, Request, Response } from "express";
 import { MongoClient } from "mongodb";
 import { callAgent } from "./agent/agent";
+import { z } from "zod";
 
 const app: Express = express();
 app.use(express.json());
+
+// Input validation schemas
+const chatRequestSchema = z.object({
+  message: z.string().min(1, "Message cannot be empty").max(1000, "Message too long"),
+});
+
+const threadIdSchema = z.string().min(1, "Thread ID cannot be empty").max(100, "Thread ID too long");
+
+// Environment variable validation
+function validateEnvironmentVariables() {
+  const requiredVars = [
+    'MONGODB_ATLAS_URI',
+    'ANTHROPIC_API_KEY',
+    'OPENAI_API_KEY'
+  ];
+
+  const missingVars = requiredVars.filter(varName => !process.env[varName]);
+
+  if (missingVars.length > 0) {
+    throw new Error(`Missing required environment variables: ${missingVars.join(', ')}`);
+  }
+
+  console.log('Environment variables validated successfully');
+}
 
 // Initialize MongoDB client with connection pooling
 const client = new MongoClient(process.env.MONGODB_ATLAS_URI as string, {
@@ -18,6 +43,9 @@ const client = new MongoClient(process.env.MONGODB_ATLAS_URI as string, {
 
 async function startServer() {
   try {
+    // Validate environment variables first
+    validateEnvironmentVariables();
+
     await client.connect();
     await client.db("admin").command({ ping: 1 });
     console.log(
@@ -33,28 +61,36 @@ async function startServer() {
     // API endpoint to start a new conversation
     // curl -X POST -H "Content-Type: application/json" -d '{"message": "Build a team to make an iOS app, and tell me the talent gaps."}' http://localhost:3000/chat
     app.post("/chat", async (req: Request, res: Response) => {
-      const initialMessage = req.body.message;
-      const threadId = Date.now().toString(); // Simple thread ID generation
       try {
-        const response = await callAgent(client, initialMessage, threadId);
+        const { message } = chatRequestSchema.parse(req.body);
+        const threadId = Date.now().toString(); // Simple thread ID generation
+        const response = await callAgent(client, message, threadId);
         res.json({ threadId, response });
       } catch (error) {
-        console.error("Error starting conversation:", error);
-        res.status(500).json({ error: "Internal server error" });
+        if (error instanceof z.ZodError) {
+          res.status(400).json({ error: "Invalid request", details: error.issues });
+        } else {
+          console.error("Error starting conversation:", error);
+          res.status(500).json({ error: "Internal server error" });
+        }
       }
     });
 
     // API endpoint to send a message in an existing conversation
     // curl -X POST -H "Content-Type: application/json" -d '{"message": "What team members did you recommend?"}' http://localhost:3000/chat/123456789
     app.post("/chat/:threadId", async (req: Request, res: Response) => {
-      const { threadId } = req.params;
-      const { message } = req.body;
       try {
+        const threadId = threadIdSchema.parse(req.params.threadId);
+        const { message } = chatRequestSchema.parse(req.body);
         const response = await callAgent(client, message, threadId);
         res.json({ response });
       } catch (error) {
-        console.error("Error in chat:", error);
-        res.status(500).json({ error: "Internal server error" });
+        if (error instanceof z.ZodError) {
+          res.status(400).json({ error: "Invalid request", details: error.issues });
+        } else {
+          console.error("Error in chat:", error);
+          res.status(500).json({ error: "Internal server error" });
+        }
       }
     });
 
