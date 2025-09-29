@@ -252,12 +252,13 @@ All configuration values are defined as `const` assertions for type safety.
 ### Input Validation & Security
 
 - Implemented Zod-based request validation for all API endpoints
-- Added environment variable validation on startup
+- Added environment variable validation on startup (moved to dedicated file `src/agent/config/env-validation.ts`)
 - Enhanced error responses with detailed validation messages
 
 ### Configuration Management
 
 - Moved hardcoded values to centralized config
+- Moved environment validation function to dedicated file `src/agent/config/env-validation.ts`
 - Improved maintainability for different environments
 
 ## Differences from Original Server

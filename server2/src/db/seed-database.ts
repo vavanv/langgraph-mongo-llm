@@ -165,7 +165,7 @@ async function seedDatabase(): Promise<void> {
 
     // Initialize Qdrant client
     const qdrantClient = new QdrantClient({
-      url: process.env.QDRANT_URL || "http://localhost:6333",
+      url: process.env.QDRANT_URL,
       apiKey: process.env.QDRANT_API_KEY,
     });
 

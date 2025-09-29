@@ -2,37 +2,25 @@ import "dotenv/config";
 import express, { Express } from "express";
 import { MongoClient } from "mongodb";
 import { logger } from "./utils/logger";
-import { requestLogger, corsMiddleware, responseFormatter, errorHandler } from "./middleware";
+import {
+  requestLogger,
+  corsMiddleware,
+  responseFormatter,
+  errorHandler,
+} from "./middleware";
 import indexRoutes from "./routes/index";
 import healthRoutes from "./routes/health";
 import chatRoutes, { setMongoClient } from "./routes/chat";
 
+import { validateEnvironmentVariables } from "./agent/config/env-validation";
+
 const app: Express = express();
 
 // Middleware
-app.use(express.json({ limit: '10mb' })); // Add payload size limit
+app.use(express.json({ limit: "10mb" })); // Add payload size limit
 app.use(requestLogger);
 app.use(corsMiddleware);
 app.use(responseFormatter);
-
-// Environment variable validation
-function validateEnvironmentVariables() {
-  const requiredVars = [
-    "MONGODB_ATLAS_URI",
-    "ANTHROPIC_API_KEY",
-    "OPENAI_API_KEY",
-  ];
-
-  const missingVars = requiredVars.filter((varName) => !process.env[varName]);
-
-  if (missingVars.length > 0) {
-    throw new Error(
-      `Missing required environment variables: ${missingVars.join(", ")}`
-    );
-  }
-
-  console.log("Environment variables validated successfully");
-}
 
 // Initialize MongoDB client with connection pooling
 const client = new MongoClient(process.env.MONGODB_ATLAS_URI as string, {
