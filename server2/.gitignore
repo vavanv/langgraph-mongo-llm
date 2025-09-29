@@ -6,3 +6,4 @@
 **/*lock*
 .DS_Store
 *log
+**/coverage/*

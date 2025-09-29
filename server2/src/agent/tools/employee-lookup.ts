@@ -51,14 +51,35 @@ export const employeeLookupTool = (collection: Collection) =>
           }
         }
 
-        // For each result, fetch the full employee data from MongoDB using employee_id
+        // Define projection to fetch only necessary fields for performance
+        const employeeProjection = {
+          employee_id: 1,
+          first_name: 1,
+          last_name: 1,
+          job_details: 1,
+          work_location: 1,
+          contact_details: 1,
+          skills: 1,
+          department: 1, // Add computed field for easier access
+          _id: 0, // Exclude MongoDB _id field
+        };
+
+        // For each result, fetch the employee data from MongoDB using employee_id with projection
         const enrichedResults = await Promise.all(
           searchResult.map(async (point) => {
             const employeeId = point.payload?.employee_id;
             logger.debug(`Looking up employee: ${employeeId}`);
-            const employeeData = await collection.findOne({
-              employee_id: employeeId,
-            });
+            const employeeData = await collection.findOne(
+              { employee_id: employeeId },
+              { projection: employeeProjection }
+            );
+
+            // Add computed department field for easier access
+            if (employeeData) {
+              (employeeData as any).department =
+                employeeData.job_details?.department;
+            }
+
             logger.debug(`Found employee data: ${!!employeeData}`);
             return {
               score: point.score,

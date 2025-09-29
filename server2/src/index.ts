@@ -2,12 +2,18 @@ import "dotenv/config";
 import express, { Express } from "express";
 import { MongoClient } from "mongodb";
 import { logger } from "./utils/logger";
+import { requestLogger, corsMiddleware, responseFormatter, errorHandler } from "./middleware";
 import indexRoutes from "./routes/index";
 import healthRoutes from "./routes/health";
 import chatRoutes, { setMongoClient } from "./routes/chat";
 
 const app: Express = express();
-app.use(express.json());
+
+// Middleware
+app.use(express.json({ limit: '10mb' })); // Add payload size limit
+app.use(requestLogger);
+app.use(corsMiddleware);
+app.use(responseFormatter);
 
 // Environment variable validation
 function validateEnvironmentVariables() {
@@ -56,6 +62,9 @@ async function startServer() {
     app.use("/", indexRoutes);
     app.use("/health", healthRoutes);
     app.use("/chat", chatRoutes);
+
+    // Error handling middleware (must be last)
+    app.use(errorHandler);
 
     const PORT = process.env.PORT || 3000;
     const server = app.listen(PORT, () => {
